@@ -1,19 +1,39 @@
-name: Create release
+name: release
 
 on:
-   workflow_dispatch:
-      inputs:
-         version:
-            description: 'Define release version (ex: v1, v2, v3)'
-            required: true
+  push:
+    branches:
+      - main
+    paths:
+      - CHANGELOG.md
+  workflow_dispatch:
+  workflow_call:
 
 jobs:
-   create-branch:
-      uses: bosesuneha/action-release-workflows/.github/workflows/create_js_branch.yaml@main
-      with:
-         version: ${{ github.event.inputs.version }}
-   release-pr:
-      needs: create-branch
-      uses: bosesuneha/action-release-workflows/.github/workflows/release.yaml@main
-      permissions:
-         contents: write
+  changelog:
+    uses: bosesuneha/action-release-workflows/.github/workflows/extract_changelog.yaml@main
+    with:
+      changelogPath: ./CHANGELOG.md
+  checkVersion:
+    needs: changelog
+    runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.tag-exists.outputs.exists }}
+    steps:
+      - name: check if tag exists
+        uses: mukunku/tag-exists-action@5dfe2bf779fe5259360bb10b2041676713dcc8a3 # v1.1.0
+        id: tag-exists
+        with:
+          tag: ${{ needs.changelog.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  createRelease:
+    needs: [checkVersion, changelog]
+    permissions:
+      contents: write
+    if: needs.checkVersion.outputs.exists == 'false'
+    uses: bosesuneha/action-release-workflows/.github/workflows/create_release.yaml@main
+    with:
+      branch: ${{ github.ref }}
+      version: ${{ needs.changelog.outputs.version }}
+      body: ${{ needs.changelog.outputs.body }}
