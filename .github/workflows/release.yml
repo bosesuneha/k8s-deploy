@@ -8,10 +8,9 @@ on:
             required: true
 
 jobs:
-    create-branch:
-        uses: bosesuneha/action-release-workflows/.github/workflows/create_js_branch.yaml@main
-        with: 
-            version: ${{ github.event.inputs.version }}
-    release-pr:
-        uses: bosesuneha/action-release-workflows/.github/workflows/release.yaml@main
-       
+   create-branch:
+      uses: bosesuneha/action-release-workflows/.github/workflows/create_js_branch.yaml@main
+      with:
+         version: ${{ github.event.inputs.version }}
+   release-pr:
+      uses: bosesuneha/action-release-workflows/.github/workflows/release.yaml@main
