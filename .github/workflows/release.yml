@@ -1,0 +1,17 @@
+name: Create release PR
+
+on:
+   workflow_dispatch:
+      inputs:
+         version:
+            description: 'Define release version (ex: v1, v2, v3)'
+            required: true
+
+jobs:
+    create-branch:
+        uses: bosesuneha/action-release-workflows/.github/workflows/create_js_branch.yaml@main
+        with: 
+            version: ${{ github.event.inputs.version }}
+    release-pr:
+        uses: bosesuneha/action-release-workflows/.github/workflows/release.yaml@main
+       
