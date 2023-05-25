@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.0.6] - 2023-05-25
+
+### Changed
+
+-  Updated release workflow
+
 ## [0.0.5] - 2023-05-25
 
 ### Changed
