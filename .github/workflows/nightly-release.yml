@@ -1,0 +1,14 @@
+name:  Nightly Release 
+
+on:
+  schedule:
+    - cron: '0 8 * * MON-FRI'  # Run every weekday at midnight PST
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: nightly release 
+        uses: bosesuneha/action-release-workflows/.github/workflows/nightly_release.yaml@main
