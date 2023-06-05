@@ -1,4 +1,4 @@
-name:  Nightly Release 
+name:  nightly-release 
 
 on:
   schedule:
@@ -7,8 +7,4 @@ on:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: nightly release 
-        uses: bosesuneha/action-release-workflows/.github/workflows/nightly_release.yaml@main
+    uses: bosesuneha/action-release-workflows/.github/workflows/nightly_release.yaml@main
