@@ -2,7 +2,7 @@ name:  nightly-release
 
 on:
   schedule:
-    - cron: '0 8 * * MON-FRI'  # Run every weekday at midnight PST
+    - cron: '0 8 * * *'  # Run every weekday at midnight PST
   workflow_dispatch:
 
 jobs:
