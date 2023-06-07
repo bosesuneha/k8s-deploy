@@ -10,7 +10,7 @@ on:
 
 jobs:
    release:
-      uses: bosesuneha/action-release-workflows/.github/workflows/release.yaml@main
+      uses: bosesuneha/action-release-workflows/.github/workflows/release_js_project.yaml@main
       with:
          changelogPath: ./CHANGELOG.md
    
