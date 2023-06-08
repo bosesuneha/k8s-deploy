@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.0.9] - 2023-06-08
+
+### Changed
+
+- Updated nightly-release workflow
+
 ## [0.0.8] - 2023-06-07
 
 ### Changed
