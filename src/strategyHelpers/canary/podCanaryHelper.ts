@@ -9,11 +9,13 @@ import {isDeploymentEntity} from '../../types/kubernetesTypes'
 import {getReplicaCount} from '../../utilities/manifestUpdateUtils'
 import {DeployResult} from '../../types/deployResult'
 import {K8sObject} from '../../types/k8sObject'
+import {checkForErrors} from '../../utilities/kubectlUtils'
 
 export async function deployPodCanary(
    filePaths: string[],
    kubectl: Kubectl,
-   onlyDeployStable: boolean = false
+   onlyDeployStable: boolean = false,
+   timeout?: string
 ): Promise<DeployResult> {
    const newObjectsList = []
    const percentage = parseInt(core.getInput('percentage', {required: true}))
@@ -95,8 +97,15 @@ export async function deployPodCanary(
    core.debug('New objects list: ' + JSON.stringify(newObjectsList))
    const manifestFiles = fileHelper.writeObjectsToFile(newObjectsList)
    const forceDeployment = core.getInput('force').toLowerCase() === 'true'
+   const serverSideApply = core.getInput('server-side').toLowerCase() === 'true'
 
-   const execResult = await kubectl.apply(manifestFiles, forceDeployment)
+   const execResult = await kubectl.apply(
+      manifestFiles,
+      forceDeployment,
+      serverSideApply,
+      timeout
+   )
+   checkForErrors([execResult])
    return {execResult, manifestFiles}
 }
 

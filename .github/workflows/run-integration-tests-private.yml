@@ -11,7 +11,7 @@ on:
 jobs:
    run-integration-test:
       name: Run Minikube Integration Tests
-      runs-on: ubuntu-latest
+      runs-on: ubuntu-22.04
       env:
          KUBECONFIG: /home/runner/.kube/config
          NAMESPACE: test-${{ github.run_id }}
@@ -19,7 +19,7 @@ jobs:
          contents: read
          id-token: write
       steps:
-         - uses: actions/checkout@v4
+         - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
 
          - name: Install dependencies
            run: |
@@ -30,13 +30,13 @@ jobs:
          - name: Build
            run: ncc build src/run.ts -o lib
          - name: Azure login
-           uses: azure/login@v2.2.0
+           uses: azure/login@v2.3.0
            with:
               client-id: ${{ secrets.AZURE_CLIENT_ID }}
               tenant-id: ${{ secrets.AZURE_TENANT_ID }}
               subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-         - uses: Azure/setup-kubectl@v4
+         - uses: Azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4.0.1
            name: Install Kubectl
 
          - name: Create private AKS cluster and set context
@@ -51,7 +51,7 @@ jobs:
            run: |
               az aks command invoke --resource-group ${{ env.NAMESPACE }} --name ${{ env.NAMESPACE }} --command "kubectl create ns ${{ env.NAMESPACE }}"
 
-         - uses: actions/setup-python@v5
+         - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # 6.0.0
            name: Install Python
            with:
               python-version: '3.x'

@@ -1,4 +1,3 @@
-import * as core from '@actions/core'
 import {getManifestObjects} from './blueGreenHelper'
 import {
    promoteBlueGreenIngress,
@@ -11,20 +10,50 @@ import {Kubectl} from '../../types/kubectl'
 import {MAX_VAL, MIN_VAL, TRAFFIC_SPLIT_OBJECT} from './smiBlueGreenHelper'
 import * as smiTester from './smiBlueGreenHelper'
 import * as bgHelper from './blueGreenHelper'
+import {ExecOutput} from '@actions/exec'
 
-let testObjects
 const ingressFilepath = ['test/unit/manifests/test-ingress-new.yml']
+
 jest.mock('../../types/kubectl')
+
+// Shared variables used across all test suites
+let testObjects: any
 const kubectl = new Kubectl('')
 
+// Shared mock objects following DRY principle
+const mockSuccessResult: ExecOutput = {
+   stdout: 'deployment.apps/nginx-deployment created',
+   stderr: '',
+   exitCode: 0
+}
+
+const mockFailureResult: ExecOutput = {
+   stdout: '',
+   stderr: 'error: deployment failed',
+   exitCode: 1
+}
+
+const mockBgDeployment = {
+   deployResult: {
+      execResult: {exitCode: 0, stderr: '', stdout: ''},
+      manifestFiles: []
+   },
+   objects: []
+}
+
 describe('promote tests', () => {
+   let kubectlApplySpy: jest.SpyInstance
+
    beforeEach(() => {
       //@ts-ignore
       Kubectl.mockClear()
       testObjects = getManifestObjects(ingressFilepath)
+      kubectlApplySpy = jest.spyOn(kubectl, 'apply')
    })
 
    test('promote blue/green ingress', async () => {
+      kubectlApplySpy.mockResolvedValue(mockSuccessResult)
+
       const mockLabels = new Map<string, string>()
       mockLabels[bgHelper.BLUE_GREEN_VERSION_LABEL] = bgHelper.GREEN_LABEL_VALUE
 
@@ -63,10 +92,12 @@ describe('promote tests', () => {
 
       await expect(
          promoteBlueGreenIngress(kubectl, testObjects)
-      ).rejects.toThrowError()
+      ).rejects.toThrow()
    })
 
    test('promote blue/green service', async () => {
+      kubectlApplySpy.mockResolvedValue(mockSuccessResult)
+
       const mockLabels = new Map<string, string>()
       mockLabels[bgHelper.BLUE_GREEN_VERSION_LABEL] = bgHelper.GREEN_LABEL_VALUE
       jest.spyOn(bgHelper, 'fetchResource').mockImplementation(() =>
@@ -102,10 +133,12 @@ describe('promote tests', () => {
 
       await expect(
          promoteBlueGreenService(kubectl, testObjects)
-      ).rejects.toThrowError()
+      ).rejects.toThrow()
    })
 
    test('promote blue/green SMI', async () => {
+      kubectlApplySpy.mockResolvedValue(mockSuccessResult)
+
       const mockLabels = new Map<string, string>()
       mockLabels[bgHelper.BLUE_GREEN_VERSION_LABEL] = bgHelper.NONE_LABEL_VALUE
 
@@ -153,6 +186,220 @@ describe('promote tests', () => {
          .spyOn(smiTester, 'validateTrafficSplitsState')
          .mockImplementation(() => Promise.resolve(false))
 
-      expect(promoteBlueGreenSMI(kubectl, testObjects)).rejects.toThrowError()
+      expect(promoteBlueGreenSMI(kubectl, testObjects)).rejects.toThrow()
+   })
+
+   // Consolidated error tests
+   test.each([
+      {
+         name: 'should throw error when kubectl apply fails during blue/green ingress promotion',
+         fn: () => promoteBlueGreenIngress(kubectl, testObjects),
+         setup: () => {
+            const mockLabels = new Map<string, string>()
+            mockLabels[bgHelper.BLUE_GREEN_VERSION_LABEL] =
+               bgHelper.GREEN_LABEL_VALUE
+            jest.spyOn(bgHelper, 'fetchResource').mockImplementation(() =>
+               Promise.resolve({
+                  kind: 'Ingress',
+                  spec: {},
+                  metadata: {labels: mockLabels, name: 'nginx-ingress-green'}
+               })
+            )
+         }
+      },
+      {
+         name: 'should throw error when kubectl apply fails during blue/green service promotion',
+         fn: () => promoteBlueGreenService(kubectl, testObjects),
+         setup: () => {
+            const mockLabels = new Map<string, string>()
+            mockLabels[bgHelper.BLUE_GREEN_VERSION_LABEL] =
+               bgHelper.GREEN_LABEL_VALUE
+            jest.spyOn(bgHelper, 'fetchResource').mockImplementation(() =>
+               Promise.resolve({
+                  kind: 'Service',
+                  spec: {selector: mockLabels},
+                  metadata: {labels: mockLabels, name: 'nginx-service-green'}
+               })
+            )
+            jest
+               .spyOn(servicesTester, 'validateServicesState')
+               .mockResolvedValue(true)
+         }
+      },
+      {
+         name: 'should throw error when kubectl apply fails during blue/green SMI promotion',
+         fn: () => promoteBlueGreenSMI(kubectl, testObjects),
+         setup: () => {
+            const mockTsObject: TrafficSplitObject = {
+               apiVersion: 'v1alpha3',
+               kind: TRAFFIC_SPLIT_OBJECT,
+               metadata: {
+                  name: 'nginx-service-trafficsplit',
+                  labels: new Map<string, string>(),
+                  annotations: new Map<string, string>()
+               },
+               spec: {
+                  service: 'nginx-service',
+                  backends: [
+                     {service: 'nginx-service-stable', weight: MIN_VAL},
+                     {service: 'nginx-service-green', weight: MAX_VAL}
+                  ]
+               }
+            }
+            jest
+               .spyOn(bgHelper, 'fetchResource')
+               .mockResolvedValue(mockTsObject)
+            jest
+               .spyOn(smiTester, 'validateTrafficSplitsState')
+               .mockResolvedValue(true)
+         }
+      }
+   ])('$name', async ({fn, setup}) => {
+      kubectlApplySpy.mockClear()
+      kubectlApplySpy.mockResolvedValue(mockFailureResult)
+      setup()
+
+      await expect(fn()).rejects.toThrow()
+
+      const timeoutArg = kubectlApplySpy.mock.calls[0][3]
+      expect(typeof timeoutArg === 'string' || timeoutArg === undefined).toBe(
+         true
+      )
+
+      expect(kubectlApplySpy).toHaveBeenCalledWith(
+         expect.any(Array),
+         expect.any(Boolean),
+         expect.any(Boolean),
+         timeoutArg
+      )
+      expect(kubectlApplySpy).toHaveBeenCalledTimes(1)
+   })
+})
+
+// Timeout tests
+describe('promote timeout tests', () => {
+   beforeEach(() => {
+      // @ts-ignore
+      Kubectl.mockClear()
+      testObjects = getManifestObjects(ingressFilepath)
+   })
+
+   const mockDeployWithLabel = () =>
+      jest
+         .spyOn(bgHelper, 'deployWithLabel')
+         .mockResolvedValue(mockBgDeployment)
+
+   const setupFetchResource = (
+      kind: string,
+      name: string,
+      labelValue: string
+   ) => {
+      const mockLabels = new Map<string, string>()
+      mockLabels[bgHelper.BLUE_GREEN_VERSION_LABEL] = labelValue
+
+      jest.spyOn(bgHelper, 'fetchResource').mockResolvedValue({
+         kind,
+         spec: {},
+         metadata: {labels: mockLabels, name}
+      })
+   }
+
+   test.each([
+      {
+         name: 'promoteBlueGreenIngress with timeout',
+         fn: promoteBlueGreenIngress,
+         kind: 'Ingress',
+         resourceName: 'nginx-ingress-green',
+         timeout: '300s',
+         setup: () =>
+            setupFetchResource(
+               'Ingress',
+               'nginx-ingress-green',
+               bgHelper.GREEN_LABEL_VALUE
+            )
+      },
+      {
+         name: 'promoteBlueGreenService with timeout',
+         fn: promoteBlueGreenService,
+         kind: 'Service',
+         resourceName: 'nginx-service-green',
+         timeout: '240s',
+         setup: () => {
+            setupFetchResource(
+               'Service',
+               'nginx-service-green',
+               bgHelper.GREEN_LABEL_VALUE
+            )
+            jest
+               .spyOn(servicesTester, 'validateServicesState')
+               .mockResolvedValue(true)
+         }
+      },
+      {
+         name: 'promoteBlueGreenSMI with timeout',
+         fn: promoteBlueGreenSMI,
+         kind: 'TrafficSplit',
+         resourceName: 'nginx-service-trafficsplit',
+         timeout: '180s',
+         setup: () => {
+            const mockTsObject: TrafficSplitObject = {
+               apiVersion: 'v1alpha3',
+               kind: TRAFFIC_SPLIT_OBJECT,
+               metadata: {
+                  name: 'nginx-service-trafficsplit',
+                  labels: new Map<string, string>(),
+                  annotations: new Map<string, string>()
+               },
+               spec: {
+                  service: 'nginx-service',
+                  backends: [
+                     {service: 'nginx-service-stable', weight: MIN_VAL},
+                     {service: 'nginx-service-green', weight: MAX_VAL}
+                  ]
+               }
+            }
+
+            jest
+               .spyOn(bgHelper, 'fetchResource')
+               .mockResolvedValue(mockTsObject)
+            jest
+               .spyOn(smiTester, 'validateTrafficSplitsState')
+               .mockResolvedValue(true)
+         }
+      }
+   ])('$name', async ({fn, timeout, setup}) => {
+      setup()
+      const deployWithLabelSpy = mockDeployWithLabel()
+
+      await fn(kubectl, testObjects, timeout)
+
+      expect(deployWithLabelSpy).toHaveBeenCalledWith(
+         kubectl,
+         expect.any(Array),
+         bgHelper.NONE_LABEL_VALUE,
+         timeout
+      )
+
+      deployWithLabelSpy.mockRestore()
+   })
+
+   test('promote functions without timeout should pass undefined', async () => {
+      setupFetchResource(
+         'Ingress',
+         'nginx-ingress-green',
+         bgHelper.GREEN_LABEL_VALUE
+      )
+      const deployWithLabelSpy = mockDeployWithLabel()
+
+      await promoteBlueGreenIngress(kubectl, testObjects)
+
+      expect(deployWithLabelSpy).toHaveBeenCalledWith(
+         kubectl,
+         expect.any(Array),
+         bgHelper.NONE_LABEL_VALUE,
+         undefined
+      )
+
+      deployWithLabelSpy.mockRestore()
    })
 })

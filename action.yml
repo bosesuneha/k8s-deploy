@@ -4,9 +4,9 @@ inputs:
    # Please ensure you have used either azure/k8s-actions/aks-set-context or azure/k8s-actions/k8s-set-context in the workflow before this action
    # You also need to have kubectl installed (azure/setup-kubectl)
    namespace:
-      description: 'Choose the target Kubernetes namespace. If the namespace is not provided, the commands will run in the default namespace.'
+      description: 'Choose the target Kubernetes namespace. If the namespace is not provided, the commands will automatically use the namespace defined in the manifest files first or otherwise run in the default namespace.'
       required: false
-      default: default
+      default: ''
    manifests:
       description: 'Path to the manifest files which will be used for deployment.'
       required: true
@@ -55,6 +55,14 @@ inputs:
       description: 'Deploy when a previous deployment already exists. If true then --force argument is added to the apply command'
       required: false
       default: false
+   server-side:
+      description: 'The apply command runs in the server instead of the client. If true then --server-side argument is added to the apply command.'
+      required: false
+      default: false
+   timeout:
+      description: 'Timeout for the rollout status'
+      required: false
+      default: 10m
    token:
       description: 'Github token'
       default: ${{ github.token }}
@@ -64,7 +72,7 @@ inputs:
       required: false
       default: true
    annotate-namespace:
-      description: 'Annotate the target namespace. Ignored when annotate-resources is set to false.'
+      description: 'Annotate the target namespace. Ignored when annotate-resources is set to false or no namespace is provided.'
       required: false
       default: true
    private-cluster:
@@ -75,11 +83,15 @@ inputs:
       description: 'Name of resource group - Only required if using private cluster'
       required: false
    name:
-      description: 'Resource group name - Only required if using private cluster'
+      description: 'Name of the private cluster - Only required if using private cluster'
       required: false
    skip-tls-verify:
       description: True if the insecure-skip-tls-verify option should be used. Input should be 'true' or 'false'.
       default: false
+   resource-type:
+      description: Either Microsoft.ContainerService/managedClusters or Microsoft.ContainerService/fleets'.
+      required: false
+      default: 'Microsoft.ContainerService/managedClusters'
 
 branding:
    color: 'green'

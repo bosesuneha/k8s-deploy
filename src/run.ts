@@ -1,12 +1,19 @@
 import * as core from '@actions/core'
 import {getKubectlPath, Kubectl} from './types/kubectl'
-import {deploy} from './actions/deploy'
+import {
+   deploy,
+   ResourceTypeFleet,
+   ResourceTypeManagedCluster
+} from './actions/deploy'
+import {ClusterType} from './inputUtils'
 import {promote} from './actions/promote'
 import {reject} from './actions/reject'
 import {Action, parseAction} from './types/action'
 import {parseDeploymentStrategy} from './types/deploymentStrategy'
 import {getFilesFromDirectoriesAndURLs} from './utilities/fileUtils'
 import {PrivateKubectl} from './types/privatekubectl'
+import {parseResourceTypeInput} from './inputUtils'
+import {parseDuration} from './utilities/durationUtils'
 
 export async function run() {
    // verify kubeconfig is set
@@ -29,12 +36,33 @@ export async function run() {
    const fullManifestFilePaths =
       await getFilesFromDirectoriesAndURLs(manifestFilePaths)
    const kubectlPath = await getKubectlPath()
-   const namespace = core.getInput('namespace') || 'default'
+   const namespace = core.getInput('namespace') || '' // Sets namespace to an empty string if not provided, allowing the manifest-defined namespace to take precedence instead of "default".
    const isPrivateCluster =
       core.getInput('private-cluster').toLowerCase() === 'true'
    const resourceGroup = core.getInput('resource-group') || ''
    const resourceName = core.getInput('name') || ''
    const skipTlsVerify = core.getBooleanInput('skip-tls-verify')
+
+   let resourceType: ClusterType
+   try {
+      // included in the trycatch to allow raw input to go out of scope after parsing
+      const resourceTypeInput = core.getInput('resource-type')
+      resourceType = parseResourceTypeInput(resourceTypeInput)
+   } catch (e) {
+      core.setFailed(e)
+      return
+   }
+
+   // Parse and validate timeout using extracted utility
+   let timeout: string
+   try {
+      const timeoutInput = core.getInput('timeout') || '10m'
+      timeout = parseDuration(timeoutInput)
+      core.debug(`Using timeout: ${timeout}`)
+   } catch (e) {
+      core.setFailed(`Invalid timeout parameter: ${e.message}`)
+      return
+   }
 
    const kubectl = isPrivateCluster
       ? new PrivateKubectl(
@@ -49,15 +77,27 @@ export async function run() {
    // run action
    switch (action) {
       case Action.DEPLOY: {
-         await deploy(kubectl, fullManifestFilePaths, strategy)
+         await deploy(
+            kubectl,
+            fullManifestFilePaths,
+            strategy,
+            resourceType,
+            timeout
+         )
          break
       }
       case Action.PROMOTE: {
-         await promote(kubectl, fullManifestFilePaths, strategy)
+         await promote(
+            kubectl,
+            fullManifestFilePaths,
+            strategy,
+            resourceType,
+            timeout
+         )
          break
       }
       case Action.REJECT: {
-         await reject(kubectl, fullManifestFilePaths, strategy)
+         await reject(kubectl, fullManifestFilePaths, strategy, timeout)
          break
       }
       default: {

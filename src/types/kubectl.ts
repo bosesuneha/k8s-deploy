@@ -34,7 +34,9 @@ export class Kubectl {
 
    public async apply(
       configurationPaths: string | string[],
-      force: boolean = false
+      force: boolean = false,
+      serverSide: boolean = false,
+      timeout?: string
    ): Promise<ExecOutput> {
       try {
          if (!configurationPaths || configurationPaths?.length === 0)
@@ -46,10 +48,13 @@ export class Kubectl {
             createInlineArray(configurationPaths)
          ]
          if (force) applyArgs.push('--force')
+         if (serverSide) applyArgs.push('--server-side')
+         if (timeout) applyArgs.push(`--timeout=${timeout}`)
 
          return await this.execute(applyArgs.concat(this.getFlags()))
       } catch (err) {
          core.debug('Kubectl apply failed:' + err)
+         throw err
       }
    }
 
@@ -157,13 +162,16 @@ export class Kubectl {
    public async checkRolloutStatus(
       resourceType: string,
       name: string,
-      namespace?: string
+      namespace?: string,
+      timeout?: string
    ): Promise<ExecOutput> {
-      return await this.execute(
-         ['rollout', 'status', `${resourceType}/${name}`].concat(
-            this.getFlags(namespace)
-         )
+      const command = ['rollout', 'status', `${resourceType}/${name}`].concat(
+         this.getFlags(namespace)
       )
+      if (timeout) {
+         command.push(`--timeout=${timeout}`)
+      }
+      return await this.execute(command)
    }
 
    public async getResource(
@@ -183,24 +191,55 @@ export class Kubectl {
       )
    }
 
-   public executeCommand(command: string, args?: string) {
+   public executeCommand(command: string, args?: string, timeout?: string) {
       if (!command) throw new Error('Command must be defined')
       const a = args ? [args] : []
-      return this.execute([command, ...a.concat(this.getFlags())])
+      return this.execute(
+         [command, ...a.concat(this.getFlags())],
+         false,
+         timeout
+      )
    }
 
-   public delete(args: string | string[], namespace?: string) {
+   public delete(
+      args: string | string[],
+      namespace?: string,
+      timeout?: string
+   ) {
       if (typeof args === 'string')
-         return this.execute(['delete', args].concat(this.getFlags(namespace)))
-      return this.execute(['delete', ...args.concat(this.getFlags(namespace))])
+         return this.execute(
+            ['delete', args].concat(this.getFlags(namespace)),
+            false,
+            timeout
+         )
+      return this.execute(
+         ['delete', ...args.concat(this.getFlags(namespace))],
+         false,
+         timeout
+      )
    }
 
-   protected async execute(args: string[], silent: boolean = false) {
-      core.debug(`Kubectl run with command: ${this.kubectlPath} ${args}`)
+   protected async execute(
+      args: string[],
+      silent: boolean = false,
+      timeout?: string
+   ) {
+      if (timeout) {
+         args.push(`--timeout=${timeout}`)
+      }
+
+      // core.debug(`Kubectl run with command: ${this.kubectlPath} ${args}`)
+      core.debug(
+         `Kubectl run with command: ${this.kubectlPath} ${args.join(' ')}`
+      )
 
       return await getExecOutput(this.kubectlPath, args, {
          silent
       })
+   }
+
+   public getNamespace(namespaceOverride?: string): string {
+      return namespaceOverride || this.namespace
    }
 
    protected getFlags(namespaceOverride?: string): string[] {
@@ -209,7 +248,7 @@ export class Kubectl {
          flags.push('--insecure-skip-tls-verify')
       }
 
-      const ns = namespaceOverride || this.namespace
+      const ns = this.getNamespace(namespaceOverride)
       if (ns) {
          flags.push('--namespace', ns)
       }

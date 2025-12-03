@@ -13,12 +13,12 @@ on:
 jobs:
    run-integration-test:
       name: Run Minikube Integration Tests
-      runs-on: ubuntu-latest
+      runs-on: ubuntu-22.04
       env:
          KUBECONFIG: /home/runner/.kube/config
          NAMESPACE: test-${{ github.run_id }}
       steps:
-         - uses: actions/checkout@v4
+         - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
 
          - name: Install dependencies
            run: |
@@ -31,23 +31,24 @@ jobs:
          - name: Build
            run: ncc build src/run.ts -o lib
 
-         - uses: Azure/setup-kubectl@v4
+         - uses: Azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4.0.1
            name: Install Kubectl
 
          - id: setup-minikube
            name: Setup Minikube
-           uses: medyagh/setup-minikube@latest
+           uses: medyagh/setup-minikube@e3c7f79eb1e997eabccc536a6cf318a2b0fe19d9 # v0.0.20
            with:
-              minikube-version: 1.24.0
-              kubernetes-version: 1.22.3
+              minikube-version: 1.34.0
+              kubernetes-version: 1.31.0
               driver: 'none'
            timeout-minutes: 3
 
-         - name: Install linkerd and add controlplane to cluster
+         - name: Install Linkerd and SMI
            run: |
-              curl --proto '=https' --tlsv1.2 -sSfL https://run.linkerd.io/install | sh
-              curl -sL https://linkerd.github.io/linkerd-smi/install | sh
+              curl --proto '=https' --tlsv1.2 -sSfL https://run.linkerd.io/install-edge | sh
               export PATH=$PATH:/home/runner/.linkerd2/bin
+              curl -sL https://linkerd.github.io/linkerd-smi/install | sh
+              kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml
 
               linkerd install --crds | kubectl apply -f -
               linkerd install --set proxyInit.runAsRoot=true | kubectl apply -f -
@@ -56,7 +57,7 @@ jobs:
          - name: Create namespace to run tests
            run: kubectl create ns ${{ env.NAMESPACE }}
 
-         - uses: actions/setup-python@v5
+         - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # 6.0.0
            name: Install Python
            with:
               python-version: '3.x'

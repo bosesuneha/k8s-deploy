@@ -35,19 +35,21 @@ import {
 } from '../utilities/githubUtils'
 import {getDeploymentConfig} from '../utilities/dockerUtils'
 import {DeployResult} from '../types/deployResult'
+import {ClusterType} from '../inputUtils'
 
 export async function deployManifests(
    files: string[],
    deploymentStrategy: DeploymentStrategy,
    kubectl: Kubectl,
-   trafficSplitMethod: TrafficSplitMethod
+   trafficSplitMethod: TrafficSplitMethod,
+   timeout?: string
 ): Promise<string[]> {
    switch (deploymentStrategy) {
       case DeploymentStrategy.CANARY: {
          const canaryDeployResult: DeployResult =
             trafficSplitMethod == TrafficSplitMethod.SMI
-               ? await deploySMICanary(files, kubectl)
-               : await deployPodCanary(files, kubectl)
+               ? await deploySMICanary(files, kubectl, false, timeout)
+               : await deployPodCanary(files, kubectl, false, timeout)
 
          checkForErrors([canaryDeployResult.execResult])
          return canaryDeployResult.manifestFiles
@@ -60,7 +62,8 @@ export async function deployManifests(
          const blueGreenDeployment = await deployBlueGreen(
             kubectl,
             files,
-            routeStrategy
+            routeStrategy,
+            timeout
          )
          core.debug(
             `objects deployed for ${routeStrategy}: ${JSON.stringify(
@@ -83,16 +86,25 @@ export async function deployManifests(
          )
 
          const forceDeployment = core.getInput('force').toLowerCase() === 'true'
+         const serverSideApply =
+            core.getInput('server-side').toLowerCase() === 'true'
          if (trafficSplitMethod === TrafficSplitMethod.SMI) {
             const updatedManifests = appendStableVersionLabelToResource(files)
 
             const result = await kubectl.apply(
                updatedManifests,
-               forceDeployment
+               forceDeployment,
+               serverSideApply,
+               timeout
             )
             checkForErrors([result])
          } else {
-            const result = await kubectl.apply(files, forceDeployment)
+            const result = await kubectl.apply(
+               files,
+               forceDeployment,
+               serverSideApply,
+               timeout
+            )
             checkForErrors([result])
          }
 
@@ -138,9 +150,16 @@ function appendStableVersionLabelToResource(files: string[]): string[] {
 
 export async function checkManifestStability(
    kubectl: Kubectl,
-   resources: Resource[]
+   resources: Resource[],
+   resourceType: ClusterType,
+   timeout?: string
 ): Promise<void> {
-   await KubernetesManifestUtility.checkManifestStability(kubectl, resources)
+   await KubernetesManifestUtility.checkManifestStability(
+      kubectl,
+      resources,
+      resourceType,
+      timeout
+   )
 }
 
 export async function annotateAndLabelResources(
@@ -190,7 +209,7 @@ async function annotateResources(
    deploymentConfig: DeploymentConfig
 ) {
    const annotateResults: ExecOutput[] = []
-   const namespace = core.getInput('namespace') || 'default'
+   const namespace = core.getInput('namespace') || '' // Sets namespace to an empty string if not provided, allowing the manifest-defined namespace to take precedence instead of "default".
    const lastSuccessSha = await getLastSuccessfulRunSha(
       kubectl,
       namespace,
@@ -221,8 +240,10 @@ async function annotateResources(
    )}`
 
    const annotateNamespace = !(
+      namespace === '' ||
       core.getInput('annotate-namespace').toLowerCase() === 'false'
-   )
+   ) // If namespace is empty, we don't annotate it. If the input is false, we also don't annotate it.
+
    if (annotateNamespace) {
       annotateResults.push(
          await kubectl.annotate(
