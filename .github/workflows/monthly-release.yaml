@@ -1,0 +1,27 @@
+name: Create Release PR
+
+on:
+   workflow_dispatch:
+      inputs:
+         increment:
+            description: 'Version increment type'
+            required: true
+            type: choice
+            options:
+               - patch
+               - minor
+               - major
+            default: 'patch'
+
+   schedule:
+      - cron: '0 9 1 * *'
+
+jobs:
+   create-release-pr:
+      uses: bosesuneha/azure-action-release-workflows/.github/workflows/monthly_release_pr.yaml@monthly-release-pr-workflow
+      with:
+         increment: ${{ inputs.increment || 'patch' }}
+         base_branch: main
+      permissions:
+         contents: write
+         pull-requests: write
