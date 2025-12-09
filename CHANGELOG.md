@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.0.5] - 2025-12-09
+
+- [#13](https://github.com/bosesuneha/k8s-deploy/pull/13) chore: release v5.0.5
+- [#8](https://github.com/bosesuneha/k8s-deploy/pull/8) update workflow
+- [#7](https://github.com/bosesuneha/k8s-deploy/pull/7) Test workflow
+
 ## [5.0.5] - 2025-12-05
 
 - [#8](https://github.com/bosesuneha/k8s-deploy/pull/8) update workflow
